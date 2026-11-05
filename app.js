@@ -63,7 +63,7 @@ function setTheme(t) {
 }
 
 /* ---------- Estado e dados (Firestore) ---------- */
-const state = { user: null, tab: "treino", day: todayIdx(), categories: [], exercises: [], items: [] };
+const state = { user: null, sync: {}, tab: "treino", day: todayIdx(), categories: [], exercises: [], items: [] };
 let db, auth;
 let unsubs = [];
 
@@ -78,17 +78,37 @@ const catOf = (name) => {
 
 function subscribe() {
   unsubs.forEach((u) => u());
+  state.sync = {};
   unsubs = ["categories", "exercises", "items"].map((n) =>
-    onSnapshot(col(n),
-      (snap) => { state[n] = snap.docs.map((d) => ({ id: d.id, ...d.data() })); render(); },
-      () => toast("Sem permissão ou falha na sincronização"))
+    onSnapshot(col(n), { includeMetadataChanges: true },
+      (snap) => {
+        state[n] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        state.sync[n] = { cache: snap.metadata.fromCache, pending: snap.metadata.hasPendingWrites };
+        render();
+      },
+      (err) => {
+        console.error("Firestore:", err.code, err.message);
+        state.sync[n] = { error: err.code };
+        render();
+      })
   );
+}
+
+// Resume o estado da conexão com o servidor para o indicador do topo.
+function syncStatus() {
+  const all = Object.values(state.sync);
+  const failed = all.find((x) => x.error);
+  if (failed) return ["err", failed.error === "permission-denied" ? "Sem permissão" : "Erro de conexão"];
+  if (!navigator.onLine) return ["wait", "Offline"];
+  if (all.length < 3 || all.some((x) => x.cache)) return ["wait", "Aguardando servidor"];
+  if (all.some((x) => x.pending)) return ["wait", "Enviando…"];
+  return ["ok", "Sincronizado"];
 }
 
 function unsubscribe() {
   unsubs.forEach((u) => u());
   unsubs = [];
-  Object.assign(state, { categories: [], exercises: [], items: [] });
+  Object.assign(state, { categories: [], exercises: [], items: [], sync: {} });
 }
 
 function logout() {
@@ -223,8 +243,11 @@ function loginView() {
 
 function header() {
   const title = { treino: DAYS_FULL[state.day], exercicios: "Exercícios", ajustes: "Ajustes" }[state.tab];
+  const [kind, label] = syncStatus();
   return h("header", { class: "top" }, h("h1", {}, title),
-    state.tab === "treino" && state.day === todayIdx() && h("span", { class: "badge" }, "Hoje"));
+    h("div", { class: "top-end" },
+      state.tab === "treino" && state.day === todayIdx() && h("span", { class: "badge" }, "Hoje"),
+      h("span", { class: `sync ${kind}`, role: "status" }, label)));
 }
 
 function itemCard(i) {
@@ -326,6 +349,9 @@ function init() {
   db = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
   });
+
+  window.addEventListener("online", render);
+  window.addEventListener("offline", render);
 
   // O app só desenha a tela depois que o Firebase informa se há alguém logado.
   onAuthStateChanged(auth, (user) => {

@@ -145,3 +145,9 @@ input, select { width: 100%; min-height: 46px; padding: 0 14px; border-radius: 1
 /* Login */
 .login { display: grid; gap: 14px; width: 100%; max-width: 360px; text-align: left; }
 .form-error { min-height: 1.3em; color: var(--danger); font-size: .9rem; font-weight: 600; }
+
+/* Indicador de sincronização */
+.top-end { display: flex; align-items: center; gap: 8px; flex: none; }
+.sync { font-size: .75rem; font-weight: 700; padding: 4px 10px; border-radius: 99px; background: var(--surface-2); color: var(--muted); }
+.sync.ok { color: var(--accent-text); }
+.sync.err { color: var(--danger); }
