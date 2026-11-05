@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Troque pelos UIDs das contas (Authentication > Users > coluna "UID de usuário").
+    function allowed() {
+      return request.auth != null
+        && request.auth.uid in ['COLE_UID_1', 'COLE_UID_2'];
+    }
+
+    match /workspace/main/{col}/{id} {
+      allow read, delete: if allowed();
+      allow create, update: if allowed() && request.resource.data.size() <= 12;
+    }
+  }
+}
